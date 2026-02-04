@@ -126,3 +126,123 @@ tk.Button(
 ).pack(pady=30)
 
 root.mainloop()
+
+
+
+
+
+
+
+НАЧАЛО
+
+
+import tkinter as tk
+from tkinter import messagebox
+from docx import Document
+from datetime import datetime
+import os
+import sys
+import pymorphy2
+
+# --- Инициализация MorphAnalyzer ---
+morph = pymorphy2.MorphAnalyzer()
+
+# --- Функция даты ---
+def format_date():
+    months = [
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    ]
+    now = datetime.now()
+    day = f"«{now.day:02d}»"
+    month = months[now.month - 1]
+    year = now.year
+    return f"{day} {month} {year} г."
+
+# --- Склонение ФИО в родительный падеж ---
+def to_genitive(fio: str) -> str:
+    parts = fio.strip().split()
+    if len(parts) != 3:
+        return fio  # безопасный откат
+
+    last, first, middle = parts
+    try:
+        last_g = morph.parse(last)[0].inflect({'gent'}).word
+        first_g = morph.parse(first)[0].inflect({'gent'}).word
+        middle_g = morph.parse(middle)[0].inflect({'gent'}).word
+        return f"{last_g} {first_g} {middle_g}"
+    except Exception:
+        return fio
+
+# --- Универсальная замена плейсхолдера ---
+def replace_placeholder(paragraph, placeholder, value):
+    if placeholder not in paragraph.text:
+        return False
+    text = paragraph.text.replace(placeholder, value)
+    paragraph.clear()
+    paragraph.add_run(text)
+    return True
+
+# --- Путь к шаблону для exe ---
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# --- Создание документа ---
+def create_document():
+    fio = fio_entry.get().strip()
+    inn = inn_entry.get().strip()
+
+    if not fio or not inn:
+        messagebox.showerror("Ошибка", "Заполните ФИО и ИНН")
+        return
+
+    fio_gen = to_genitive(fio)
+    date_text = format_date()
+
+    placeholders = {
+        "{{DATE}}": date_text,
+        "{{FIO}}": fio,
+        "{{INN}}": inn,
+        "{{FIO_GEN}}": fio_gen
+    }
+
+    try:
+        doc = Document(resource_path("template.docx"))
+
+        for paragraph in doc.paragraphs:
+            for key, value in placeholders.items():
+                replace_placeholder(paragraph, key, value)
+
+        output_name = f"Документ_{fio.split()[0]}.docx"
+        doc.save(output_name)
+        messagebox.showinfo("Готово", f"Документ создан:\n{output_name}")
+
+    except Exception as e:
+        messagebox.showerror("Ошибка", str(e))
+
+# --- Интерфейс tkinter ---
+root = tk.Tk()
+root.title("Заполнение документа")
+root.geometry("420x260")
+root.resizable(False, False)
+
+tk.Label(root, text="ФИО", font=("Arial", 11)).pack(pady=(20, 5))
+fio_entry = tk.Entry(root, width=45)
+fio_entry.pack()
+
+tk.Label(root, text="ИНН", font=("Arial", 11)).pack(pady=(15, 5))
+inn_entry = tk.Entry(root, width=45)
+inn_entry.pack()
+
+tk.Button(
+    root,
+    text="Создать документ",
+    font=("Arial", 11, "bold"),
+    command=create_document
+).pack(pady=30)
+
+root.mainloop()
